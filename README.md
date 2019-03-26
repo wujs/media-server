@@ -1,30 +1,50 @@
-#librtmp
-1. rtmp-client send rtmp packet to server
-2. rtmp-reader receive rtmp packet from server
-3. flv-demuxer Adobe FLV demuxer
-4. other: MPEG-4 AVCDecoderConfigurationRecord/AudioSpecificConfig
+* Build status: [![Build Status](https://travis-ci.org/ireader/media-server.svg?branch=master)](https://travis-ci.org/ireader/media-server)
+* Build Dependence: https://github.com/ireader/sdk
+ 
+# libflv
+1. Adobe FLV muxer/demuxer
+2. MPEG-4 AVCDecoderConfigurationRecord/AudioSpecificConfig
 
-#libmpeg
+# librtmp
+1. rtmp-client: RTMP publish/play
+2. rtmp-server: RTMP Server module
+
+# libmpeg
 1. MPEG-2 PS packer/unpacker
 2. MPEG-2 TS packer/unpacker
+3. H.264/H.265/AAC/MP3
 
-#librtp
-1. RFC3550 RTP/RTCP packer/unpacker
-2. RTP with H.264
-3. RTP with MPEG-2 PS
+# librtp
+1. RFC3550 RTP/RTCP
+2. RTP with H.264/H.265/MPEG-2/MPEG-4/VP8/VP9
+2. RTP with G.711/G.726/G.729/MP3/AAC/OPUS
+3. RTP with MPEG-2 PS/TS
 
-#librtsp
-1. RFC 2326 RTSP packer/unpacker
-2. RTSP text parser
+# librtsp
+1. RFC 2326 RTSP client
+2. RFC 2326 RTSP Server
+2. RTSP parser
 3. RFC 4566 SDP parser
-4. RFC 822 datetime parser
 
-#libhls
-1. HLS Vod
-2. HLS Live(not ready)
-3. HLS Server(not ready)
+# libhls
+1. HLS Media: TS segmenter
+2. HLS M3U8: generate m3u8 file
 
-#libhttp(https://github.com/ireader/sdk)
+# libdash
+1. ISO/IEC 23009-1 MPEG-DASH static(vod)
+2. ISO/IEC 23009-1 MPEG-DASH dynamic(live)
+
+# libmov
+1. MP4 File reader/writer
+2. MP4 faststart(moov box before mdat)
+3. fragment MP4 File writer
+
+# libhttp(https://github.com/ireader/sdk)
 1. HTTP Server(base AIO)
 2. HTTP Client
 3. HTTP Cookie
+
+### Make
+1. make clean && make
+2. make RELEASE=1 (make release library, default debug)
+3. make PLATFORM=arm-hisiv100nptl-linux (cross compile)

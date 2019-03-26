@@ -1,44 +1,47 @@
+// RFC6184 RTP Payload Format for H.264 Video
+
+#include "rtp-packet.h"
+#include "rtp-payload-internal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
-#include "ctypedef.h"
-#include "rtp-unpack.h"
-#include "rtp-packet.h"
 
 #define H264_NAL(v)	(v & 0x1F)
 #define FU_START(v) (v & 0x80)
 #define FU_END(v)	(v & 0x40)
 #define FU_NAL(v)	(v & 0x1F)
 
-struct rtp_h264_unpack_t
+struct rtp_decode_h264_t
 {
-	struct rtp_unpack_func_t func;
+	struct rtp_payload_t handler;
 	void* cbparam;
 
 	uint16_t seq; // rtp seq
 
-	void* ptr;
+	uint8_t* ptr;
 	int size, capacity;
+
+	int flags;
 };
 
-static void* rtp_h264_unpack_create(struct rtp_unpack_func_t *func, void* param)
+static void* rtp_h264_unpack_create(struct rtp_payload_t *handler, void* param)
 {
-	struct rtp_h264_unpack_t *unpacker;
-	unpacker = (struct rtp_h264_unpack_t *)malloc(sizeof(*unpacker));
+	struct rtp_decode_h264_t *unpacker;
+	unpacker = (struct rtp_decode_h264_t *)calloc(1, sizeof(*unpacker));
 	if(!unpacker)
 		return NULL;
 
-	memset(unpacker, 0, sizeof(*unpacker));
-	memcpy(&unpacker->func, func, sizeof(unpacker->func));
+	memcpy(&unpacker->handler, handler, sizeof(unpacker->handler));
 	unpacker->cbparam = param;
+	unpacker->flags = -1;
 	return unpacker;
 }
 
 static void rtp_h264_unpack_destroy(void* p)
 {
-	struct rtp_h264_unpack_t *unpacker;
-	unpacker = (struct rtp_h264_unpack_t *)p;
+	struct rtp_decode_h264_t *unpacker;
+	unpacker = (struct rtp_decode_h264_t *)p;
 
 	if(unpacker->ptr)
 		free(unpacker->ptr);
@@ -48,269 +51,224 @@ static void rtp_h264_unpack_destroy(void* p)
 	free(unpacker);
 }
 
-static int rtp_h264_unpack_stap_a(struct rtp_h264_unpack_t *unpacker, const void* data, size_t bytes, uint64_t time)
+// 5.7.1. Single-Time Aggregation Packet (STAP) (p23)
+/*
+ 0               1               2               3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                           RTP Header                          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|STAP-B NAL HDR |            DON                |  NALU 1 Size  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| NALU 1 Size   | NALU 1 HDR    |         NALU 1 Data           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               +
+:                                                               :
++               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|               | NALU 2 Size                   |   NALU 2 HDR  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                            NALU 2 Data                        |
+:                                                               :
+|                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                               :    ...OPTIONAL RTP padding    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+static int rtp_h264_unpack_stap(struct rtp_decode_h264_t *unpacker, const uint8_t* ptr, int bytes, uint32_t timestamp, int stap_b)
 {
-	// 5.7.1. Single-Time Aggregation Packet (STAP) (p20)
-	unsigned char stapnal;
-	uint16_t nallen;
-	const unsigned char* ptr;
-	ptr = (const unsigned char*)data;
-	stapnal = ptr[0];
-
-	++ptr;
-	nallen = 0;
-	for(bytes -= 1; bytes > 2; bytes -= nallen + 2)
-	{
-		unsigned char nal;
-
-		nallen = nbo_r16(ptr);
-		if(nallen + 2 > bytes)
-		{
-			assert(0);
-			return -1; // error
-		}
-
-		nal = ptr[2];
-		assert(H264_NAL(nal) > 0 && H264_NAL(nal) < 24);
-
-		unpacker->func.packet(unpacker->cbparam, nal, ptr+3, nallen-1, time);
-
-		ptr = ptr + nallen + 2; // next NALU
-	}
-
-	return 0;
-}
-
-static int rtp_h264_unpack_stap_b(struct rtp_h264_unpack_t *unpacker, const void* data, size_t bytes, uint64_t time)
-{
-	// 5.7.1. Single-Time Aggregation Packet (STAP)
-	unsigned char stapnal;
+	int n;
+	uint16_t len;
 	uint16_t don;
-	uint16_t nallen;
-	const unsigned char* ptr;
-	ptr = (const unsigned char*)data;
 
-	stapnal = ptr[0];
-	don = nbo_r16(ptr + 1);
+	n = stap_b ? 3 : 1;
+	don = stap_b ? nbo_r16(ptr + 1) : 0;
+	ptr += n; // STAP-A / STAP-B HDR + DON
 
-	ptr += 3;
-	nallen = 0;
-	for(bytes -= 1; bytes > 2; bytes -= nallen + 2)
+	for(bytes -= n; bytes > 2; bytes -= len + 2)
 	{
-		unsigned char nal;
-
-		nallen = nbo_r16(ptr);
-		if(nallen + 2> bytes)
+		len = nbo_r16(ptr);
+		if(len + 2 > bytes)
 		{
 			assert(0);
-			return -1; // error
+			unpacker->flags = RTP_PAYLOAD_FLAG_PACKET_LOST;
+			unpacker->size = 0;
+			return -EINVAL; // error
 		}
 
-		nal = ptr[2];
-		assert(H264_NAL(nal) > 0 && H264_NAL(nal) < 24);
-		unpacker->func.packet(unpacker->cbparam, nal, ptr+3, nallen-1, time);
+		assert(H264_NAL(ptr[2]) > 0 && H264_NAL(ptr[2]) < 24);
+		unpacker->handler.packet(unpacker->cbparam, ptr + 2, len, timestamp, unpacker->flags);
+		unpacker->flags = 0;
+		unpacker->size = 0;
 
-		ptr = ptr + nallen + 2; // next NALU
+		ptr += len + 2; // next NALU
+		don = (don + 1) % 65536;
 	}
 
-	return 0;
+	return 1; // packet handled
 }
 
-static int rtp_h264_unpack_mtap16(struct rtp_h264_unpack_t *unpacker, const void* data, int bytes, uint64_t time)
+// 5.7.2. Multi-Time Aggregation Packets (MTAPs) (p27)
+/*
+ 0               1               2               3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                          RTP Header                           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|MTAP16 NAL HDR |   decoding order number base  |  NALU 1 Size  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| NALU 1 Size   | NALU 1 DOND   |         NALU 1 TS offset      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| NALU 1 HDR    |                NALU 1 DATA                    |
++-+-+-+-+-+-+-+-+                                               +
+:                                                               :
++               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|               | NALU 2 SIZE                   |   NALU 2 DOND |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+| NALU 2 TS offset              | NALU 2 HDR    |  NALU 2 DATA  |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+               |
+:                                                               :
+|                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                               :    ...OPTIONAL RTP padding    |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+static int rtp_h264_unpack_mtap(struct rtp_decode_h264_t *unpacker, const uint8_t* ptr, int bytes, uint32_t timestamp, int n)
 {
-	// 5.7.2. Multi-Time Aggregation Packets (MTAPs)
-	unsigned char mtapnal;
+	uint16_t dond;
 	uint16_t donb;
-	uint16_t nallen;
-	const unsigned char* ptr;
-	ptr = (const unsigned char*)data;
+	uint16_t len;
+	uint32_t ts;
 
-	mtapnal = ptr[0];
-	donb = nbo_r16(ptr+1);
-
-	ptr += 3;
-	for(bytes -= 1; bytes > 6; bytes -= nallen + 2)
-	{
-		unsigned char nal, dond;
-		uint16_t timestamp;
-
-		nallen = nbo_r16(ptr);
-		if(nallen + 2 > bytes)
-		{
-			assert(0);
-			return -1; // error
-		}
-
-		assert(nallen > 4);
-		dond = ptr[2];
-		timestamp = nbo_r16(ptr+3);
-
-		nal = ptr[5];
-		assert(H264_NAL(nal) > 0 && H264_NAL(nal) < 24);
-		unpacker->func.packet(unpacker->cbparam, nal, ptr+6, nallen-4, time);
-
-		ptr = ptr + nallen + 2; // next NALU
-	}
-
-	return 0;
-}
-
-static int rtp_h264_unpack_mtap24(struct rtp_h264_unpack_t *unpacker, const void* data, int bytes, uint64_t time)
-{
-	// 5.7.2. Multi-Time Aggregation Packets (MTAPs)
-	unsigned char mtapnal;
-	uint16_t donb;
-	uint16_t nallen;
-	const unsigned char* ptr;
-	ptr = (const unsigned char*)data;
-
-	mtapnal = ptr[0];
 	donb = nbo_r16(ptr + 1);
+	ptr += 3; // MTAP16/MTAP24 HDR + DONB
 
-	ptr += 3;
-	for(bytes -= 1; bytes > 2; bytes -= nallen + 2)
+	for(bytes -= 3; bytes > 3 + n; bytes -= len + 2)
 	{
-		unsigned char nal, dond;
-		unsigned int timestamp;
-		const unsigned short *p;
-		p = (const unsigned short *)ptr;
-
-		nallen = nbo_r16(ptr);
-		if(nallen > bytes - 2)
+		len = nbo_r16(ptr);
+		if(len + 2 > bytes || len < 1 /*DOND*/ + n /*TS offset*/ + 1 /*NALU*/)
 		{
 			assert(0);
-			return -1; // error
+			unpacker->flags = RTP_PAYLOAD_FLAG_PACKET_LOST;
+			unpacker->size = 0;
+			return -EINVAL; // error
 		}
 
-		assert(nallen > 5);
-		ptr = (const unsigned char*)(p + 1);
-		dond = ptr[0];
-		timestamp = (ptr[1] << 16) | (ptr[2] << 8) | ptr[3];
+		dond = (ptr[2] + donb) % 65536;
+		ts = (uint16_t)nbo_r16(ptr + 3);
+		if (3 == n) ts = (ts << 16) | ptr[5]; // MTAP24
 
-		nal = ptr[4];
-		assert(H264_NAL(nal) > 0 && H264_NAL(nal) < 24);
-		unpacker->func.packet(unpacker->cbparam, nal, ptr+5, nallen-5, time);
+		// if the NALU-time is larger than or equal to the RTP timestamp of the packet, 
+		// then the timestamp offset equals (the NALU - time of the NAL unit - the RTP timestamp of the packet).
+		// If the NALU - time is smaller than the RTP timestamp of the packet,
+		// then the timestamp offset is equal to the NALU - time + (2 ^ 32 - the RTP timestamp of the packet).
+		ts += timestamp; // wrap 1 << 32
 
-		ptr = ptr + nallen; // next NALU
+		assert(H264_NAL(ptr[n + 3]) > 0 && H264_NAL(ptr[n + 3]) < 24);
+		unpacker->handler.packet(unpacker->cbparam, ptr + 1 + n, len - 1 - n, ts, unpacker->flags);
+		unpacker->flags = 0;
+		unpacker->size = 0;
+
+		ptr += len + 1 + n; // next NALU
 	}
 
-	return 0;
+	return 1; // packet handled
 }
 
-static int rtp_h264_unpack_fu_a(struct rtp_h264_unpack_t *unpacker, const void* data, int bytes, uint64_t time)
+// 5.8. Fragmentation Units (FUs) (p29)
+/*
+ 0               1               2               3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|  FU indicator |   FU header   |              DON              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
+|                                                               |
+|                          FU payload                           |
+|                                                               |
+|                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                               :   ...OPTIONAL RTP padding     |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+static int rtp_h264_unpack_fu(struct rtp_decode_h264_t *unpacker, const uint8_t* ptr, int bytes, uint32_t timestamp, int fu_b)
 {
-	unsigned char fuindicator, fuheader;
-	const unsigned char* ptr;
-	ptr = (const unsigned char*)data;
+	int n;
+	uint8_t fuheader;
+	//uint16_t don;
 
-	fuindicator = ptr[0];
-	fuheader = ptr[1];
+	n = fu_b ? 4 : 2;
+	if (bytes < n)
+		return -EINVAL; // error
 
-	if(FU_START(fuheader))
-	{
-		assert(0 == unpacker->size);
-		unpacker->size = 0;
-	}
-	else
-	{
-		assert(0 < unpacker->size);
-	}
-
-	if(unpacker->size + bytes - 2 > unpacker->capacity)
+	if (unpacker->size + bytes - n + 1 /*NALU*/ > unpacker->capacity)
 	{
 		void* p = NULL;
-		int size = unpacker->size + bytes * 2;
+		int size = unpacker->size + bytes + 128000 + 1;
 		p = realloc(unpacker->ptr, size);
-		if(!p)
+		if (!p)
 		{
+			// set packet lost flag
+			unpacker->flags = RTP_PAYLOAD_FLAG_PACKET_LOST;
 			unpacker->size = 0;
-			return -1;
+			return -ENOMEM; // error
 		}
-		unpacker->ptr = p;
+		unpacker->ptr = (uint8_t*)p;
 		unpacker->capacity = size;
 	}
 
-	memmove((char*)unpacker->ptr + unpacker->size, ptr + 2, bytes - 2);
-	unpacker->size += bytes - 2;
-
-	if(FU_END(fuheader))
-	{
-		unsigned char nal;
-		nal = (fuindicator & 0xE0) | (fuheader & 0x1F);
-		assert(H264_NAL(nal) > 0 && H264_NAL(nal) < 24);
-		unpacker->func.packet(unpacker->cbparam, nal, unpacker->ptr, unpacker->size, time);
-		unpacker->size = 0; // reset
-	}
-
-	return 0;
-}
-
-static int rtp_h264_unpack_fu_b(struct rtp_h264_unpack_t *unpacker, const void* data, int bytes, uint64_t time)
-{
-	unsigned char fuindicator, fuheader;
-	unsigned short don;
-	const unsigned char* ptr;
-	ptr = (const unsigned char*)data;
-
-	fuindicator = ptr[0];
 	fuheader = ptr[1];
-	don = nbo_r16(ptr + 2);
-
-	if(FU_START(fuheader))
+	//don = nbo_r16(ptr + 2);
+	if (FU_START(fuheader))
 	{
 		assert(0 == unpacker->size);
-		unpacker->size = 0;
+		unpacker->size = 1; // NAL unit type byte
+		unpacker->ptr[0] = (ptr[0]/*indicator*/ & 0xE0) | (fuheader & 0x1F);
+		assert(H264_NAL(unpacker->ptr[0]) > 0 && H264_NAL(unpacker->ptr[0]) < 24);
 	}
 	else
 	{
-		assert(0 < unpacker->size);
-	}
-
-	if(unpacker->size + bytes - 4 > unpacker->capacity)
-	{
-		void* p = NULL;
-		int size = unpacker->size + bytes * 2;
-		p = realloc(unpacker->ptr, size);
-		if(!p)
+		if (0 == unpacker->size)
 		{
-			unpacker->size = 0;
-			return -1;
+			assert(0);
+			unpacker->flags = RTP_PAYLOAD_FLAG_PACKET_LOST;
+			return 0; // packet discard
 		}
-		unpacker->ptr = p;
-		unpacker->capacity = size;
+		assert(unpacker->size > 0);
 	}
 
-	memmove((char*)unpacker->ptr + unpacker->size, ptr + 4, bytes - 4);
-	unpacker->size += bytes - 4;
+	if (bytes > n)
+	{
+		assert(unpacker->capacity >= unpacker->size + bytes - n);
+		memmove(unpacker->ptr + unpacker->size, ptr + n, bytes - n);
+		unpacker->size += bytes - n;
+	}
 
 	if(FU_END(fuheader))
 	{
-		unsigned char nal;
-		nal = (fuindicator & 0xE0) | (fuheader & 0x1F);
-		assert(H264_NAL(nal) > 0 && H264_NAL(nal) < 24);
-		unpacker->func.packet(unpacker->cbparam, nal, unpacker->ptr, unpacker->size, time);
+		unpacker->handler.packet(unpacker->cbparam, unpacker->ptr, unpacker->size, timestamp, unpacker->flags);
+		unpacker->flags = 0;
 		unpacker->size = 0; // reset
 	}
 
-	return 0;
+	return 1; // packet handled
 }
 
-static int rtp_h264_unpack_input(void* p, const void* packet, size_t bytes, uint64_t time)
+static int rtp_h264_unpack_input(void* p, const void* packet, int bytes)
 {
-	rtp_packet_t pkt;
 	unsigned char nal;
-	struct rtp_h264_unpack_t *unpacker;
+	struct rtp_packet_t pkt;
+	struct rtp_decode_h264_t *unpacker;
 
-	unpacker = (struct rtp_h264_unpack_t *)p;
-	if(0 != rtp_packet_deserialize(&pkt, packet, bytes) || pkt.payloadlen < 1)
-		return -1;
-
-	if((uint16_t)pkt.rtp.seq != unpacker->seq+1)
+	unpacker = (struct rtp_decode_h264_t *)p;
+	if(!unpacker || 0 != rtp_packet_deserialize(&pkt, packet, bytes) || pkt.payloadlen < 1)
+		return -EINVAL;
+	
+	if (-1 == unpacker->flags)
 	{
-		// packet lost
-		unpacker->size = 0; // clear fu-a/b flags
+		unpacker->flags = 0;
+		unpacker->seq = (uint16_t)(pkt.rtp.seq - 1); // disable packet lost
 	}
 
+	if ((uint16_t)pkt.rtp.seq != (uint16_t)(unpacker->seq + 1))
+	{
+		unpacker->flags = RTP_PAYLOAD_FLAG_PACKET_LOST;
+		unpacker->size = 0; // discard previous packets
+	}
 	unpacker->seq = (uint16_t)pkt.rtp.seq;
 
 	assert(pkt.payloadlen > 0);
@@ -321,42 +279,32 @@ static int rtp_h264_unpack_input(void* p, const void* packet, size_t bytes, uint
 	case 0: // reserved
 	case 31: // reserved
 		assert(0);
-		break;
+		return 0; // packet discard
 
 	case 24: // STAP-A
-		rtp_h264_unpack_stap_a(unpacker, pkt.payload, pkt.payloadlen, time);
-		break;
+		return rtp_h264_unpack_stap(unpacker, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, 0);
 	case 25: // STAP-B
-		assert(0);
-		//rtp_h264_unpack_stap_b(unpacker, pkt.payload, pkt.payloadlen, time);
-		break;
+		return rtp_h264_unpack_stap(unpacker, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, 1);
 	case 26: // MTAP16
-		assert(0);
-		//rtp_h264_unpack_mtap16(unpacker, pkt.payload, pkt.payloadlen, time);
-		break;
+		return rtp_h264_unpack_mtap(unpacker, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, 2);
 	case 27: // MTAP24
-		assert(0);
-		//rtp_h264_unpack_mtap24(unpacker, pkt.payload, pkt.payloadlen, time);
-		break;
+		return rtp_h264_unpack_mtap(unpacker, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, 3);
 	case 28: // FU-A
-		rtp_h264_unpack_fu_a(unpacker, pkt.payload, pkt.payloadlen, time);
-		break;
+		return rtp_h264_unpack_fu(unpacker, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, 0);
 	case 29: // FU-B
-		assert(0);
-		//rtp_h264_unpack_fu_b(unpacker, pkt.payload, pkt.payloadlen, time);
-		break;
+		return rtp_h264_unpack_fu(unpacker, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, 1);
 
 	default: // 1-23 NAL unit
-		unpacker->func.packet(unpacker->cbparam, nal, (const unsigned char*)pkt.payload + 1, pkt.payloadlen-1, time);
-		break;
+		unpacker->handler.packet(unpacker->cbparam, (const uint8_t*)pkt.payload, pkt.payloadlen, pkt.rtp.timestamp, unpacker->flags);
+		unpacker->flags = 0;
+		unpacker->size = 0;
+		return 1; // packet handled
 	}
-
-	return 1;
 }
 
-struct rtp_unpack_t *rtp_h264_unpacker()
+struct rtp_payload_decode_t *rtp_h264_decode()
 {
-	static struct rtp_unpack_t unpacker = {
+	static struct rtp_payload_decode_t unpacker = {
 		rtp_h264_unpack_create,
 		rtp_h264_unpack_destroy,
 		rtp_h264_unpack_input,

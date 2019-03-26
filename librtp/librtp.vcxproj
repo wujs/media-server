@@ -78,7 +78,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>.;include;..\..\sdk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -92,7 +92,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>.;include;..\..\sdk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -107,7 +107,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>.;include;..\..\sdk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -121,7 +121,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>.;include;..\..\sdk\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;OS_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -133,12 +133,28 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="payload\rtp-h265-pack.c" />
+    <ClCompile Include="payload\rtp-h265-unpack.c" />
     <ClCompile Include="payload\rtp-h264-pack.c" />
     <ClCompile Include="payload\rtp-h264-unpack.c" />
-    <ClCompile Include="payload\rtp-ps-pack.c" />
-    <ClCompile Include="payload\rtp-ps-unpack.c" />
+    <ClCompile Include="payload\rtp-mp4a-latm-pack.c" />
+    <ClCompile Include="payload\rtp-mp4a-latm-unpack.c" />
+    <ClCompile Include="payload\rtp-mp4v-es-pack.c" />
+    <ClCompile Include="payload\rtp-mp4v-es-unpack.c" />
+    <ClCompile Include="payload\rtp-mpeg1or2es-pack.c" />
+    <ClCompile Include="payload\rtp-mpeg1or2es-unpack.c" />
+    <ClCompile Include="payload\rtp-mpeg4-generic-pack.c" />
+    <ClCompile Include="payload\rtp-mpeg4-generic-unpack.c" />
+    <ClCompile Include="payload\rtp-pack.c" />
+    <ClCompile Include="payload\rtp-payload-helper.c" />
+    <ClCompile Include="payload\rtp-payload.c" />
     <ClCompile Include="payload\rtp-ts-pack.c" />
     <ClCompile Include="payload\rtp-ts-unpack.c" />
+    <ClCompile Include="payload\rtp-unpack.c" />
+    <ClCompile Include="payload\rtp-vp8-pack.c" />
+    <ClCompile Include="payload\rtp-vp8-unpack.c" />
+    <ClCompile Include="payload\rtp-vp9-pack.c" />
+    <ClCompile Include="payload\rtp-vp9-unpack.c" />
     <ClCompile Include="source\rtcp-app.c" />
     <ClCompile Include="source\rtcp-bye.c" />
     <ClCompile Include="source\rtcp-interval.c" />
@@ -148,6 +164,8 @@
     <ClCompile Include="source\rtcp.c" />
     <ClCompile Include="source\rtp-member-list.c" />
     <ClCompile Include="source\rtp-member.c" />
+    <ClCompile Include="source\rtp-packet.c" />
+    <ClCompile Include="source\rtp-profile.c" />
     <ClCompile Include="source\rtp-queue.c" />
     <ClCompile Include="source\rtp-ssrc.c" />
     <ClCompile Include="source\rtp-time.c" />
@@ -161,12 +179,13 @@
     <ClInclude Include="include\rtp-member.h" />
     <ClInclude Include="include\rtp-packet.h" />
     <ClInclude Include="include\rtp-param.h" />
+    <ClInclude Include="include\rtp-payload.h" />
     <ClInclude Include="include\rtp-profile.h" />
     <ClInclude Include="include\rtp-queue.h" />
     <ClInclude Include="include\rtp-util.h" />
     <ClInclude Include="include\rtp.h" />
-    <ClInclude Include="payload\rtp-pack.h" />
-    <ClInclude Include="payload\rtp-unpack.h" />
+    <ClInclude Include="payload\rtp-payload-helper.h" />
+    <ClInclude Include="payload\rtp-payload-internal.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

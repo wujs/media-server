@@ -1,6 +1,7 @@
 #include "sockutil.h"
 #include "rtmp-server.h"
 #include "flv-writer.h"
+#include "flv-proto.h"
 #include "sys/thread.h"
 #include "sys/system.h"
 #include <string.h>
@@ -8,10 +9,13 @@
 
 static void* s_flv;
 
-static int rtmp_server_send(void* param, const void* data, size_t bytes)
+static int rtmp_server_send(void* param, const void* header, size_t len, const void* data, size_t bytes)
 {
-	socket_t* c = (socket_t*)param;
-	return socket_send_all_by_time(*c, data, bytes, 0, 10 * 1000);
+	socket_t* socket = (socket_t*)param;
+	socket_bufvec_t vec[2];
+	socket_setbufvec(vec, 0, (void*)header, len);
+	socket_setbufvec(vec, 1, (void*)data, bytes);
+	return socket_send_v_all_by_time(*socket, vec, bytes > 0 ? 2 : 1, 0, 2000);
 }
 
 static int rtmp_server_onpublish(void* param, const char* app, const char* stream, const char* type)
@@ -20,14 +24,19 @@ static int rtmp_server_onpublish(void* param, const char* app, const char* strea
 	return 0;
 }
 
+static int rtmp_server_onscript(void* param, const void* script, size_t bytes, uint32_t timestamp)
+{
+	return flv_writer_input(s_flv, FLV_TYPE_SCRIPT, script, bytes, timestamp);
+}
+
 static int rtmp_server_onvideo(void* param, const void* data, size_t bytes, uint32_t timestamp)
 {
-	return flv_writer_input(s_flv, 9, data, bytes, timestamp);
+	return flv_writer_input(s_flv, FLV_TYPE_VIDEO, data, bytes, timestamp);
 }
 
 static int rtmp_server_onaudio(void* param, const void* data, size_t bytes, uint32_t timestamp)
 {
-	return flv_writer_input(s_flv, 8, data, bytes, timestamp);
+	return flv_writer_input(s_flv, FLV_TYPE_AUDIO, data, bytes, timestamp);
 }
 
 void rtmp_server_publish_test(const char* flv)
@@ -42,15 +51,19 @@ void rtmp_server_publish_test(const char* flv)
 	//handler.onpause = rtmp_server_onpause;
 	//handler.onseek = rtmp_server_onseek;
 	handler.onpublish = rtmp_server_onpublish;
+	handler.onscript = rtmp_server_onscript;
 	handler.onvideo = rtmp_server_onvideo;
 	handler.onaudio = rtmp_server_onaudio;
-
+	
 	socket_init();
-	socket_t s = socket_tcp_listen(NULL, 1935, 10);
-	socket_t c = socket_accept(s, NULL, NULL);
+
+	socklen_t n;
+	struct sockaddr_storage ss;
+	socket_t s = socket_tcp_listen(NULL, 1935, SOMAXCONN);
+	socket_t c = socket_accept(s, &ss, &n);
 
 	s_flv = flv_writer_create(flv);
-	void* rtmp = rtmp_server_create(&c, &handler);
+	rtmp_server_t* rtmp = rtmp_server_create(&c, &handler);
 
 	static unsigned char packet[8 * 1024 * 1024];
 	while ((r = socket_recv(c, packet, sizeof(packet), 0)) > 0)

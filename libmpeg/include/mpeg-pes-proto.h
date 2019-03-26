@@ -3,8 +3,9 @@
 
 #include "mpeg-types.h"
 
+// ISO/IEC 13818-1:2015 (E)
 // 2.4.3.7 Semantic definition of fields in PES packet
-// Table 2-22 ¨C Stream_id assignments(p50)
+// Table 2-22 ¨C Stream_id assignments(p54)
 // In transport streams, the stream_id may be set to any valid value which correctly describes the elementary stream type as defined in Table 2-22. 
 // In transport streams, the elementary stream type is specified in the program-specific information as specified in 2.4.4
 enum EPES_STREAM_ID
@@ -14,7 +15,7 @@ enum EPES_STREAM_ID
 	PES_SID_DTS			= 0x88, // ffmpeg/libavformat/mpeg.h
 	PES_SID_LPCM		= 0xA0, // ffmpeg/libavformat/mpeg.h
 
-	PES_SID_EXTENSION	= 0xB7, // PS system_header extension(p76)
+	PES_SID_EXTENSION	= 0xB7, // PS system_header extension(p81)
 	PES_SID_END			= 0xB9, // MPEG_program_end_code
 	PES_SID_START		= 0xBA, // Pack start code
 	PES_SID_SYS			= 0xBB, // System header start code
@@ -24,7 +25,7 @@ enum EPES_STREAM_ID
 	PES_SID_PADDING		= 0xBE, // padding_stream
 	PES_SID_PRIVATE_2	= 0xBF, // private_stream_2
 	PES_SID_AUDIO		= 0xC0, // ISO/IEC 13818-3/11172-3/13818-7/14496-3 audio stream '110x xxxx'
-	PES_SID_VIDEO		= 0xE0, // H.262 | H.264 | ISO/IEC 13818-2/11172-2/14496-2/14496-10 video stream '1110 xxxx'
+	PES_SID_VIDEO		= 0xE0, // H.262 | H.264 | H.265 | ISO/IEC 13818-2/11172-2/14496-2/14496-10 video stream '1110 xxxx'
 	PES_SID_ECM			= 0xF0, // ECM_stream
 	PES_SID_EMM			= 0xF1, // EMM_stream
 	PES_SID_DSMCC		= 0xF2, // H.222.0 | ISO/IEC 13818-1/13818-6_DSMCC_stream
@@ -43,16 +44,25 @@ enum EPES_STREAM_ID
 	PES_SID_PSD			= 0xFF, // program_stream_directory
 };
 
-struct _pmt_t;
-struct _psm_t;
-
-typedef struct _pes_t
+struct packet_t
 {
-	struct _pmt_t *pmt;	// program map table
+    uint8_t sid;
+    uint8_t codecid;
 
+    int flags;
+    int64_t pts;
+    int64_t dts;
+    uint8_t *data;
+    size_t size;
+    size_t capacity;
+};
+
+struct pes_t
+{
+    uint16_t pn;        // TS program number(0-ps)
 	uint16_t pid;		// PES PID : 13
 	uint8_t sid;		// PES stream_id : 8
-	uint8_t avtype;		// PMT/PSM stream_type : 8
+	uint8_t codecid;	// PMT/PSM stream_type : 8
 	uint8_t cc;			// continuity_counter : 4;
 	uint8_t* esinfo;	// es_info
 	uint16_t esinfo_len;// es_info_length : 12
@@ -100,11 +110,15 @@ typedef struct _pes_t
 	//uint8_t PES_private_data[128/8];
 
 	//uint32_t pack_field_length : 8;
-	uint8_t *payload;
-	size_t payload_len;
-} pes_t;
 
-size_t pes_read(const uint8_t* data, size_t bytes, struct _psm_t *psm, pes_t *pes);
-size_t pes_write_header(int64_t pts, int64_t dts, int streamId, uint8_t* data);
+    struct packet_t pkt;
+};
+
+size_t pes_read_header(struct pes_t *pes, const uint8_t* data, size_t bytes);
+size_t pes_write_header(const struct pes_t *pes, uint8_t* data, size_t bytes);
+size_t pes_read_mpeg1_header(struct pes_t *pes, const uint8_t* data, size_t bytes);
+
+typedef int (*pes_packet_handler)(void* param, int program, int stream, int codecid, int flags, int64_t pts, int64_t dts, const void* data, size_t bytes);
+int pes_packet(struct packet_t* pkt, const struct pes_t* pes, const void* data, size_t size, pes_packet_handler handler, void* param);
 
 #endif /* !_mpeg_pes_dec_h_ */

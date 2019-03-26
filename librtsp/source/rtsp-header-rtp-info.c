@@ -11,9 +11,15 @@
 // e.g. RTP-Info: url=rtsp://foo.com/bar.avi/streamid=0;seq=45102,url=rtsp://foo.com/bar.avi/streamid=1;seq=30211
 
 #include "rtsp-header-rtp-info.h"
+#include <stdio.h>
 #include <assert.h>
-#include "ctypedef.h"
-#include "cstringext.h"
+#include <stdlib.h>
+#include <string.h>
+#include <inttypes.h>
+
+#if defined(_WIN32) || defined(_WIN64) || defined(OS_WINDOWS)
+#define strncasecmp	_strnicmp
+#endif
 
 #define RTP_INFO_SPECIAL ",;\r\n"
 

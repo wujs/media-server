@@ -5,8 +5,6 @@
 #include "rtmp-netconnection.h"
 #include "rtmp-netstream.h"
 
-#define strlcpy(t, s, n) snprintf(t, n, "%s", s);
-
 #define N_CHUNK_STREAM	8 // maximum chunk stream count
 #define N_STREAM_NAME	256
 
@@ -115,6 +113,7 @@ struct rtmp_t
 	
 	int (*onaudio)(void* param, const uint8_t* data, size_t bytes, uint32_t timestamp);
 	int (*onvideo)(void* param, const uint8_t* data, size_t bytes, uint32_t timestamp);
+	int (*onscript)(void* param, const uint8_t* data, size_t bytes, uint32_t timestamp);
 
 	void (*onabort)(void* param, uint32_t chunk_stream_id);
 
@@ -132,6 +131,7 @@ struct rtmp_t
 			int (*onpublish)(void* param, int r, double transaction, const char* stream_name, const char* stream_type);
 			int (*onseek)(void* param, int r, double transaction, double milliSeconds);
 			int (*onpause)(void* param, int r, double transaction, uint8_t pause, double milliSeconds);
+			int (*onget_stream_length)(void* param, int r, double transaction, const char* stream_name);
 		} server;
 
 		struct
@@ -140,7 +140,8 @@ struct rtmp_t
 			int (*onconnect)(void* param);
 			int (*oncreate_stream)(void* param, double stream_id);
 			int (*onnotify)(void* param, enum rtmp_notify_t notify);
-			int (*onping)(void* param, uint32_t timestamp); // send pong
+            int (*oneof)(void* param, uint32_t stream_id); // EOF event
+			int (*onping)(void* param, uint32_t stream_id); // send pong
 			int (*onbandwidth)(void* param); // send window acknowledgement size
 		} client;
 	} u;

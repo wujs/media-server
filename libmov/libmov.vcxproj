@@ -19,23 +19,30 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\file-reader.h" />
-    <ClInclude Include="include\file-writer.h" />
     <ClInclude Include="include\mov-atom.h" />
     <ClInclude Include="include\mov-box.h" />
     <ClInclude Include="include\mov-format.h" />
-    <ClInclude Include="include\mov-internal.h" />
+    <ClInclude Include="include\fmp4-writer.h" />
     <ClInclude Include="include\mov-reader.h" />
     <ClInclude Include="include\mov-writer.h" />
+    <ClInclude Include="include\mov-buffer.h" />
+    <ClInclude Include="source\mov-internal.h" />
+    <ClInclude Include="source\mov-ioutil.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="source\file-reader.c" />
-    <ClCompile Include="source\file-writer.c" />
     <ClCompile Include="source\mov-avc1.c" />
+    <ClCompile Include="source\mov-dinf.c" />
     <ClCompile Include="source\mov-elst.c" />
+    <ClCompile Include="source\fmp4-writer.c" />
     <ClCompile Include="source\mov-ftyp.c" />
     <ClCompile Include="source\mov-hdlr.c" />
+    <ClCompile Include="source\mov-hvcc.c" />
+    <ClCompile Include="source\mov-iods.c" />
+    <ClCompile Include="source\mov-leva.c" />
+    <ClCompile Include="source\mov-mehd.c" />
+    <ClCompile Include="source\mov-mfhd.c" />
     <ClCompile Include="source\mov-minf.c" />
+    <ClCompile Include="source\mov-sidx.c" />
     <ClCompile Include="source\mov-stco.c" />
     <ClCompile Include="source\mov-stsc.c" />
     <ClCompile Include="source\mov-esds.c" />
@@ -46,7 +53,15 @@
     <ClCompile Include="source\mov-stsz.c" />
     <ClCompile Include="source\mov-stsd.c" />
     <ClCompile Include="source\mov-stts.c" />
+    <ClCompile Include="source\mov-tag.c" />
+    <ClCompile Include="source\mov-tfdt.c" />
+    <ClCompile Include="source\mov-tfhd.c" />
+    <ClCompile Include="source\mov-tfra.c" />
     <ClCompile Include="source\mov-tkhd.c" />
+    <ClCompile Include="source\mov-track.c" />
+    <ClCompile Include="source\mov-trex.c" />
+    <ClCompile Include="source\mov-trun.c" />
+    <ClCompile Include="source\mov-tx3g.c" />
     <ClCompile Include="source\mov-writer.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -107,7 +122,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>.;include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>

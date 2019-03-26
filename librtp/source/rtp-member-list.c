@@ -10,24 +10,18 @@ struct rtp_member_list
 {
 	struct rtp_member *members[N_SOURCE];
 	struct rtp_member **ptr;
-	size_t count;
-	size_t capacity;
+	int count;
+	int capacity;
 };
 
 void* rtp_member_list_create()
 {
-	struct rtp_member_list *p;
-	p = (struct rtp_member_list *)malloc(sizeof(struct rtp_member_list));
-	if(!p)
-		return NULL;
-
-	memset(p, 0, sizeof(struct rtp_member_list));
-	return p;
+	return (struct rtp_member_list *)calloc(1, sizeof(struct rtp_member_list));
 }
 
 void rtp_member_list_destroy(void* members)
 {
-	size_t i;
+	int i;
 	struct rtp_member_list *p;
 	p = (struct rtp_member_list *)members;
 
@@ -52,7 +46,7 @@ int rtp_member_list_count(void* members)
 	return p->count;
 }
 
-struct rtp_member* rtp_member_list_get(void* members, size_t index)
+struct rtp_member* rtp_member_list_get(void* members, int index)
 {
 	struct rtp_member_list *p;
 	p = (struct rtp_member_list *)members;
@@ -64,7 +58,7 @@ struct rtp_member* rtp_member_list_get(void* members, size_t index)
 
 struct rtp_member* rtp_member_list_find(void* members, uint32_t ssrc)
 {
-	size_t i;
+	int i;
 	struct rtp_member *s;
 	struct rtp_member_list *p;
 	p = (struct rtp_member_list *)members;
@@ -107,7 +101,7 @@ int rtp_member_list_add(void* members, struct rtp_member* s)
 
 int rtp_member_list_delete(void* members, uint32_t ssrc)
 {
-	size_t i;
+	int i;
 	struct rtp_member *s;
 	struct rtp_member_list *p;
 	p = (struct rtp_member_list *)members;

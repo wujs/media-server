@@ -1,67 +1,62 @@
 #include "mpeg-types.h"
+#include "mpeg-util.h"
 #include <assert.h>
 #include <string.h>
 
+#define H264_NAL_IDR 5
+#define H264_NAL_AUD 9
+
+int h264_find_nalu(const uint8_t* p, size_t bytes)
+{
+    size_t i;
+    for (i = 2; i + 1 < bytes; i++)
+    {
+        if (0x01 == p[i] && 0x00 == p[i - 1] && 0x00 == p[i - 2])
+        {
+            for (i -= 2; i > 0 && 0 == p[i - 1]; --i)
+            {
+                // filter trailing zero
+            }
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+/// @return -1-not found, other-AUD position(include start code)
 int find_h264_access_unit_delimiter(const uint8_t* p, size_t bytes)
 {
 	size_t i;
-	uint8_t nalu;
 	for (i = 2; i + 1 < bytes; i++)
 	{
-		if (0x01 == p[i] && 0x00 == p[i - 1] && 0x00 == p[i - 2])
+		if (0x01 == p[i] && 0x00 == p[i - 1] && 0x00 == p[i - 2] && H264_NAL_AUD == (p[i + 1] & 0x1f))
 		{
-			nalu = p[i + 1] & 0x1f;
-			if (9 == nalu || 5 == nalu || 1 == nalu)
-				return 9 == nalu ? 1 : 0;
+            for (i -= 2; i > 0 && 0 == p[i - 1]; --i)
+            {
+                // filter trailing zero
+            }
+            return i;
 		}
 	}
 
-	return 0;
+	return -1;
 }
 
 int find_h264_keyframe(const uint8_t* p, size_t bytes)
 {
 	size_t i;
-	uint8_t nalu;
+	uint8_t type;
 	for (i = 2; i + 1 < bytes; i++)
 	{
 		if (0x01 == p[i] && 0x00 == p[i - 1] && 0x00 == p[i - 2])
 		{
-			nalu = p[i + 1] & 0x1f;
-			if (5 >= nalu && 1 <= nalu)
-				return 5 == nalu ? 1 : 0;
+			type = p[i + 1] & 0x1f;
+			if (H264_NAL_IDR >= type && 1 <= type)
+				return H264_NAL_IDR == type ? 1 : 0;
 		}
 	}
 
 	return 0;
 }
 
-// Apple MPEG-TS H.264 nalu stream
-size_t mpeg_ts_h264(void* h264, size_t bytes)
-{
-	int i;
-	int j = 0;
-	uint8_t* p = (uint8_t*)h264;
-
-	for (i = 1; i + 3 < (int)bytes; i++)
-	{
-		if (0x00 == p[i] && 0x00 == p[i + 1] && 0x01 == p[i + 2])
-		{
-			int nalu = p[i + 3] & 0x1f;
-			if (7 != nalu && 8 != nalu && 9 != nalu)
-			{ 
-				for (j = i - 1; j >= 0 && 0x00 == p[j]; j--)
-				{
-				}
-
-				if (++j < i)
-				{
-					memmove(p + j, p + i, bytes - i);
-					bytes -= i - j;
-					i = j;
-				}
-			}
-		}
-	}
-	return bytes;
-}

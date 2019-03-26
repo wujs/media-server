@@ -12,7 +12,11 @@ static int rtmp_command_onconnect(struct rtmp_t* rtmp, double transaction, const
 {
 	int r;
 	struct rtmp_connect_t connect;
-	struct amf_object_item_t commands[7];
+	struct amf_object_item_t items[1];
+	struct amf_object_item_t commands[8];
+
+	memset(&connect, 0, sizeof(connect));
+	connect.encoding = (double)RTMP_ENCODING_AMF_0;
 	AMF_OBJECT_ITEM_VALUE(commands[0], AMF_STRING, "app", connect.app, sizeof(connect.app));
 	AMF_OBJECT_ITEM_VALUE(commands[1], AMF_STRING, "flashver", connect.flashver, sizeof(connect.flashver));
 	AMF_OBJECT_ITEM_VALUE(commands[2], AMF_STRING, "tcUrl", connect.tcUrl, sizeof(connect.tcUrl));
@@ -20,8 +24,8 @@ static int rtmp_command_onconnect(struct rtmp_t* rtmp, double transaction, const
 	AMF_OBJECT_ITEM_VALUE(commands[4], AMF_NUMBER, "audioCodecs", &connect.audioCodecs, 8);
 	AMF_OBJECT_ITEM_VALUE(commands[5], AMF_NUMBER, "videoCodecs", &connect.videoCodecs, 8);
 	AMF_OBJECT_ITEM_VALUE(commands[6], AMF_NUMBER, "videoFunction", &connect.videoFunction, 8);
+	AMF_OBJECT_ITEM_VALUE(commands[7], AMF_NUMBER, "objectEncoding", &connect.encoding, 8);
 
-	struct amf_object_item_t items[1];
 	AMF_OBJECT_ITEM_VALUE(items[0], AMF_OBJECT, "command", commands, sizeof(commands) / sizeof(commands[0]));
 
 	r = amf_read_items(data, data + bytes, items, sizeof(items) / sizeof(items[0])) ? 0 : -1;
@@ -142,6 +146,18 @@ static int rtmp_command_onpause(struct rtmp_t* rtmp, double transaction, const u
 	return rtmp->u.server.onpause(rtmp->param, r, transaction, pause, milliSeconds);
 }
 
+static int rtmp_command_onget_stream_length(struct rtmp_t* rtmp, double transaction, const uint8_t* data, uint32_t bytes)
+{
+	int r;
+	char stream_name[N_STREAM_NAME] = { 0 };
+	struct amf_object_item_t items[3];
+	AMF_OBJECT_ITEM_VALUE(items[0], AMF_OBJECT, "command", NULL, 0);
+	AMF_OBJECT_ITEM_VALUE(items[1], AMF_STRING, "playpath", stream_name, sizeof(stream_name));
+
+	r = amf_read_items(data, data + bytes, items, sizeof(items) / sizeof(items[0])) ? 0 : -1;
+	return rtmp->u.server.onget_stream_length(rtmp->param, r, transaction, stream_name);
+}
+
 /*
 // FCPublish request parser
 static int rtmp_command_onfcpublish(struct rtmp_t* rtmp, double transaction, const uint8_t* data, uint32_t bytes)
@@ -225,6 +241,7 @@ const static struct rtmp_command_handler_t s_command_handler[] = {
 	{ "publish",		rtmp_command_onpublish },
 	{ "seek",			rtmp_command_onseek },
 	{ "pause",			rtmp_command_onpause },
+	{ "getStreamLength",rtmp_command_onget_stream_length },
 
 //	{ "FCPublish",		rtmp_command_onfcpublish },
 //	{ "FCUnpublish",	rtmp_command_onfcunpublish },
@@ -256,6 +273,6 @@ int rtmp_invoke_handler(struct rtmp_t* rtmp, const struct rtmp_chunk_header_t* h
 		}
 	}
 
-	printf("unknown command: %s\n", command);
+	//printf("unknown command: %s\n", command);
 	return 0; // not found
 }

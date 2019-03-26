@@ -33,13 +33,25 @@
     <ClInclude Include="include\mpeg4-avc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\flv-utils.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="include\amf0.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\amf3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\flv-proto.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\mp3-header.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\flv-parser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\mpeg4-hevc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\mpeg4-bits.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -72,6 +84,27 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\mpeg4-annexbtomp4.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\mp3-header.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\flv-parser.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\mpeg4-hevc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\hevc-mp4toannexb.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\hevc-annexbtomp4.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\flv-demuxer-script.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\mpeg4-aac-asc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -22,12 +22,12 @@ uint8_t* rtmp_netconnection_connect(uint8_t* out, size_t bytes, double transacti
 	out = AMFWriteNamedDouble(out, end, "audioCodecs", 11, connect->audioCodecs);
 	out = AMFWriteNamedDouble(out, end, "videoCodecs", 11, connect->videoCodecs);
 	out = AMFWriteNamedDouble(out, end, "videoFunction", 13, connect->videoFunction);
-	//out = AMFWriteNamedDouble(out, end, "objectEncoding", 14, RTMP_ENCODING_AMF_0);
+	out = AMFWriteNamedDouble(out, end, "objectEncoding", 14, connect->encoding);
 	out = AMFWriteObjectEnd(out, end);
 	return out;
 }
 
-uint8_t* rtmp_netconnection_connect_reply(uint8_t* out, size_t bytes, double transactionId, const char* fmsver, double capabilities, const char* code, const char* level, const char* description)
+uint8_t* rtmp_netconnection_connect_reply(uint8_t* out, size_t bytes, double transactionId, const char* fmsver, double capabilities, const char* code, const char* level, const char* description, double encoding)
 {
 	uint8_t* end = out + bytes;
 	const char* command = "_result";
@@ -41,9 +41,10 @@ uint8_t* rtmp_netconnection_connect_reply(uint8_t* out, size_t bytes, double tra
 	out = AMFWriteObjectEnd(out, end);
 
 	out = AMFWriteObject(out, end);
-	out = AMFWriteNamedString(out, end, "code", 4, code, strlen(code));
 	out = AMFWriteNamedString(out, end, "level", 5, level, strlen(level));
+	out = AMFWriteNamedString(out, end, "code", 4, code, strlen(code));
 	out = AMFWriteNamedString(out, end, "description", 11, description, strlen(description));
+	out = AMFWriteNamedDouble(out, end, "objectEncoding", 14, encoding);
 	out = AMFWriteObjectEnd(out, end);
 	return out;
 }

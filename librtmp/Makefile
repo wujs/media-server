@@ -1,5 +1,3 @@
-ROOT:=../../sdk
-
 #--------------------------------Output------------------------------
 # OUTTYPE: 0-exe, 1-dll, 2-static
 #--------------------------------------------------------------------
@@ -35,7 +33,8 @@ else
 LIBPATHS +=
 endif
 
-LIBS =
+LIBS = 
+#LIBS += ssl crypto
 
 STATIC_LIBS =
 
@@ -43,11 +42,11 @@ STATIC_LIBS =
 #
 # DEFINES := $(addprefix -D,$(DEFINES)) # add -L prefix
 #--------------------------------------------------------------------
-DEFINES = NO_CRYPTO
+DEFINES = 
+#DEFINES += _IETF_HAMC_
+#DEFINES += _OPENSSL_
 
-include $(ROOT)/gcc.mk
+#define openssl or add sdk/source/digest/sha.c, sha1.c, sha224-256.c, sha384-512.c, hmac.c
+#INCLUDES += ../../sdk/include
 
-GCC_VER_GTE44 := $(shell echo `gcc -dumpversion | cut -f1-2 -d.` \< 4.4 | bc )
-ifeq ($(GCC_VER_GTE44),1)
-CFLAGS += -march=i586
-endif
+include ../gcc.mk

@@ -1,12 +1,9 @@
-#include "cstringext.h"
 #include "rtp-internal.h"
 #include "rtp-packet.h"
-#include "time64.h"
+#include "rtp-util.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-time64_t ntp2clock(time64_t ntp);
-time64_t clock2ntp(time64_t clock);
+#include <assert.h>
 
 static void rtp_seq_init(struct rtp_member *sender, uint16_t seq)
 {
@@ -132,10 +129,17 @@ static int rtcp_parse(struct rtp_context *ctx, const unsigned char* data, size_t
 	header.rc = RTCP_RC(rtcphd);
 	header.pt = RTCP_PT(rtcphd);
 	header.length = RTCP_LEN(rtcphd);
-	assert((header.length+1)*4 <= bytes);
-	assert(2 == header.v); // 1. RTP version field must equal 2 (p69)
+	
+	if (header.length * 4 + 4 > bytes)
+	{
+		assert(0);
+		return -1;
+	}
+
+	// 1. RTP version field must equal 2 (p69)
 	// 2. The payload type filed of the first RTCP packet in a compound packet must be SR or RR (p69)
 	// 3. padding only valid at the last packet
+	assert(2 == header.v);
 
 	if(1 == header.p)
 	{
@@ -172,7 +176,7 @@ static int rtcp_parse(struct rtp_context *ctx, const unsigned char* data, size_t
 	return (header.length+1)*4;
 }
 
-int rtcp_input_rtcp(struct rtp_context *ctx, const void* data, size_t bytes)
+int rtcp_input_rtcp(struct rtp_context *ctx, const void* data, int bytes)
 {
 	int r;
 	const unsigned char* p;
@@ -198,10 +202,10 @@ int rtcp_input_rtcp(struct rtp_context *ctx, const void* data, size_t bytes)
 	return 0;
 }
 
-int rtcp_input_rtp(struct rtp_context *ctx, const void* data, size_t bytes)
+int rtcp_input_rtp(struct rtp_context *ctx, const void* data, int bytes)
 {
-	time64_t clock;
-	rtp_packet_t pkt;
+	uint64_t clock;
+	struct rtp_packet_t pkt;
 	struct rtp_member *sender;
 
 	if(0 != rtp_packet_deserialize(&pkt, data, bytes))
@@ -212,10 +216,10 @@ int rtcp_input_rtp(struct rtp_context *ctx, const void* data, size_t bytes)
 	if(!sender)
 		return -1; // memory error
 
-	clock = time64_now();
+	clock = rtpclock();
 
 	// RFC3550 A.1 RTP Data Header Validity Checks
-	if(0 == rtp_seq_update(sender, (uint16_t)pkt.rtp.ssrc))
+	if(0 == rtp_seq_update(sender, (uint16_t)pkt.rtp.seq))
 		return 0; // disorder(need more data)
 
 	// RFC3550 A.8 Estimating the Interarrival Jitter

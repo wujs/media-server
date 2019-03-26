@@ -14,15 +14,17 @@ INCLUDES = . \
 					./include \
 					$(ROOT)/include \
 					$(ROOT)/libhttp/include \
-					../librtp/include \
-					../libmpeg/include
+					../librtp/include
 
 #-------------------------------Source-------------------------------
 #
 #--------------------------------------------------------------------
-SOURCE_PATHS = source client media
+SOURCE_PATHS = source source/client source/server
 SOURCE_FILES = $(foreach dir,$(SOURCE_PATHS),$(wildcard $(dir)/*.cpp))
 SOURCE_FILES += $(foreach dir,$(SOURCE_PATHS),$(wildcard $(dir)/*.c))
+
+#SOURCE_FILES += $(ROOT)/source/digest/md5.c
+#SOURCE_FILES += $(ROOT)/source/base64.c
 
 #-----------------------------Library--------------------------------
 #
@@ -46,9 +48,4 @@ STATIC_LIBS =
 #--------------------------------------------------------------------
 DEFINES =
 
-include $(ROOT)/gcc.mk
-
-GCC_VER_GTE44 := $(shell echo `gcc -dumpversion | cut -f1-2 -d.` \< 4.4 | bc )
-ifeq ($(GCC_VER_GTE44),1)
-CFLAGS += -march=i586
-endif
+include ../gcc.mk

@@ -1,5 +1,3 @@
-#include "file-reader.h"
-#include "file-writer.h"
 #include "mov-internal.h"
 #include <errno.h>
 #include <stdlib.h>
@@ -27,9 +25,9 @@ int mov_read_stco(struct mov_t* mov, const struct mov_box_t* box)
 	uint32_t i, entry_count;
 	struct mov_stbl_t* stbl = &mov->track->stbl;
 
-	file_reader_r8(mov->fp); /* version */
-	file_reader_rb24(mov->fp); /* flags */
-	entry_count = file_reader_rb32(mov->fp);
+	mov_buffer_r8(&mov->io); /* version */
+	mov_buffer_r24(&mov->io); /* flags */
+	entry_count = mov_buffer_r32(&mov->io);
 
 	assert(0 == stbl->stco_count && NULL == stbl->stco);
 	if (stbl->stco_count < entry_count)
@@ -43,12 +41,12 @@ int mov_read_stco(struct mov_t* mov, const struct mov_box_t* box)
 	if (MOV_TAG('s', 't', 'c', 'o') == box->type)
 	{
 		for (i = 0; i < entry_count; i++)
-			stbl->stco[i] = file_reader_rb32(mov->fp); // chunk_offset
+			stbl->stco[i] = mov_buffer_r32(&mov->io); // chunk_offset
 	}
 	else if (MOV_TAG('c', 'o', '6', '4') == box->type)
 	{
 		for (i = 0; i < entry_count; i++)
-			stbl->stco[i] = file_reader_rb64(mov->fp); // chunk_offset
+			stbl->stco[i] = mov_buffer_r64(&mov->io); // chunk_offset
 	}
 	else
 	{
@@ -57,38 +55,120 @@ int mov_read_stco(struct mov_t* mov, const struct mov_box_t* box)
 	}
 
 	stbl->stco_count = i;
-	return file_reader_error(mov->fp);
+	return mov_buffer_error(&mov->io);
 }
 
 size_t mov_write_stco(const struct mov_t* mov, uint32_t count)
 {
 	int co64;
-	size_t size, i, j = 0;
+	size_t size, i;
 	const struct mov_sample_t* sample;
 	const struct mov_track_t* track = mov->track;
 
 	sample = track->sample_count > 0 ? &track->samples[track->sample_count - 1] : NULL;
-	co64 = (sample && sample->offset + sample->bytes > UINT32_MAX) ? 1 : 0;
+	co64 = (sample && sample->offset + track->offset > UINT32_MAX) ? 1 : 0;
 	size = 12/* full box */ + 4/* entry count */ + count * (co64 ? 8 : 4);
 
-	file_writer_wb32(mov->fp, size); /* size */
-	file_writer_write(mov->fp, co64 ? "co64" : "stco", 4);
-	file_writer_wb32(mov->fp, 0); /* version & flags */
-	file_writer_wb32(mov->fp, count); /* entry count */
+	mov_buffer_w32(&mov->io, size); /* size */
+	mov_buffer_write(&mov->io, co64 ? "co64" : "stco", 4);
+	mov_buffer_w32(&mov->io, 0); /* version & flags */
+	mov_buffer_w32(&mov->io, count); /* entry count */
 
 	for (i = 0; i < track->sample_count; i++)
 	{
 		sample = track->samples + i;
-		if(0 == sample->u.stsc.first_chunk)
+		if(0 == sample->first_chunk)
 			continue;
 
-		++j;
 		if(0 == co64)
-			file_writer_wb32(mov->fp, (uint32_t)sample->offset); 
+			mov_buffer_w32(&mov->io, (uint32_t)(sample->offset + track->offset));
 		else
-			file_writer_wb64(mov->fp, sample->offset);
+			mov_buffer_w64(&mov->io, sample->offset + track->offset);
 	}
 
-	assert(j == count);
 	return size;
+}
+
+size_t mov_stco_size(const struct mov_track_t* track, uint64_t offset)
+{
+	size_t i, j;
+	uint64_t co64;
+	const struct mov_sample_t* sample;
+
+	if (track->sample_count < 1)
+		return 0;
+
+	sample = &track->samples[track->sample_count - 1];
+	co64 = sample->offset + track->offset;
+	if (co64 > UINT32_MAX || co64 + offset <= UINT32_MAX)
+		return 0;
+
+	for (i = 0, j = 0; i < track->sample_count; i++)
+	{
+		sample = track->samples + i;
+		if (0 != sample->first_chunk)
+			j++;
+	}
+
+	return j * 4;
+}
+
+uint32_t mov_build_stco(struct mov_track_t* track)
+{
+    size_t i;
+    size_t bytes = 0;
+    uint32_t count = 0;
+    struct mov_sample_t* sample = NULL;
+
+    assert(track->stsd.entry_count > 0);
+    for (i = 0; i < track->sample_count; i++)
+    {
+        if (NULL != sample
+            && sample->offset + bytes == track->samples[i].offset
+            && sample->sample_description_index == track->samples[i].sample_description_index)
+        {
+            track->samples[i].first_chunk = 0; // mark invalid value
+            bytes += track->samples[i].bytes;
+            ++sample->samples_per_chunk;
+        }
+        else
+        {
+            sample = &track->samples[i];
+            sample->first_chunk = ++count; // chunk start from 1
+            sample->samples_per_chunk = 1;
+            bytes = sample->bytes;
+        }
+    }
+
+    return count;
+}
+
+void mov_apply_stco(struct mov_track_t* track)
+{
+    size_t i, j, k;
+    uint64_t n, chunk_offset;
+    struct mov_stbl_t* stbl = &track->stbl;
+
+    // sample offset
+    assert(stbl->stsc_count > 0 && stbl->stco_count > 0);
+    stbl->stsc[stbl->stsc_count].first_chunk = stbl->stco_count + 1; // fill stco count
+    for (i = 0, n = 0; i < stbl->stsc_count; i++)
+    {
+        assert(stbl->stsc[i].first_chunk <= stbl->stco_count);
+        for (j = stbl->stsc[i].first_chunk; j < stbl->stsc[i + 1].first_chunk; j++)
+        {
+            chunk_offset = stbl->stco[j - 1]; // chunk start from 1
+            for (k = 0; k < stbl->stsc[i].samples_per_chunk; k++, n++)
+            {
+                track->samples[n].sample_description_index = stbl->stsc[i].sample_description_index;
+                track->samples[n].offset = chunk_offset;
+                track->samples[n].data = NULL;
+                chunk_offset += track->samples[n].bytes;
+                assert(track->samples[n].bytes > 0);
+                assert(0 == n || track->samples[n - 1].offset + track->samples[n - 1].bytes <= track->samples[n].offset);
+            }
+        }
+    }
+
+    assert(n == track->sample_count);
 }

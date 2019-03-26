@@ -11,10 +11,16 @@ extern "C" {
 struct mpeg4_aac_t
 {
 	uint8_t profile; // 0-NULL, 1-AAC Main, 2-AAC LC, 2-AAC SSR, 3-AAC LTP
-
 	uint8_t sampling_frequency_index; // 0-96000, 1-88200, 2-64000, 3-48000, 4-44100, 5-32000, 6-24000, 7-22050, 8-16000, 9-12000, 10-11025, 11-8000, 12-7350, 13/14-reserved, 15-frequency is written explictly
-
 	uint8_t channel_configuration; // 0-AOT, 1-1channel,front-center, 2-2channels, front-left/right, 3-3channels: front center/left/right, 4-4channels: front-center/left/right, back-center, 5-5channels: front center/left/right, back-left/right, 6-6channels: front center/left/right, back left/right LFE-channel, 7-8channels
+
+//	uint32_t frequency; // play frequency
+	uint32_t sampling_frequency;  // valid only in decode
+	uint8_t channels; // valid only in decode
+	int sbr; // sbr flag, valid only in decode
+	int ps; // ps flag, valid only in decode
+	uint8_t pce[64];
+	size_t  npce; // pce bytes
 };
 
 enum mpeg2_aac_profile
@@ -60,10 +66,16 @@ int mpeg4_aac_adts_save(const struct mpeg4_aac_t* aac, size_t payload, uint8_t* 
 /// @return >=0-adts header length, <0-error
 int mpeg4_aac_adts_load(const uint8_t* data, size_t bytes, struct mpeg4_aac_t* aac);
 
-/// @return >=0-adts header length, <0-error
+/// @return >=0-audio specific config length, <0-error
 int mpeg4_aac_audio_specific_config_load(const uint8_t* data, size_t bytes, struct mpeg4_aac_t* aac);
-/// @return >=0-adts header length, <0-error
+/// @return >=0-audio specific config length, <0-error
 int mpeg4_aac_audio_specific_config_save(const struct mpeg4_aac_t* aac, uint8_t* data, size_t bytes);
+
+/// @return >=0-stream mux config length, <0-error
+int mpeg4_aac_stream_mux_config_save(const struct mpeg4_aac_t* aac, uint8_t* data, size_t bytes);
+
+/// get AAC profile level indication value
+int mpeg4_aac_profile_level(const struct mpeg4_aac_t* aac);
 
 /// MPEG4_AAC_96000 => 96000
 /// @return -1-error, other-frequency value
@@ -71,6 +83,8 @@ int mpeg4_aac_audio_frequency_to(enum mpeg4_aac_frequency index);
 /// 96000 => MPEG4_AAC_96000
 /// @return -1-error, other-frequency index
 int mpeg4_aac_audio_frequency_from(int frequency);
+
+int mpeg4_aac_adts_frame_length(const uint8_t* data, size_t bytes);
 
 #if defined(__cplusplus)
 }

@@ -1,5 +1,3 @@
-#include "file-reader.h"
-#include "file-writer.h"
 #include "mov-internal.h"
 #include <errno.h>
 #include <stdlib.h>
@@ -21,9 +19,9 @@ int mov_read_stsc(struct mov_t* mov, const struct mov_box_t* box)
 	uint32_t i, entry_count;
 	struct mov_stbl_t* stbl = &mov->track->stbl;
 
-	file_reader_r8(mov->fp); /* version */
-	file_reader_rb24(mov->fp); /* flags */
-	entry_count = file_reader_rb32(mov->fp);
+	mov_buffer_r8(&mov->io); /* version */
+	mov_buffer_r24(&mov->io); /* flags */
+	entry_count = mov_buffer_r32(&mov->io);
 
 	assert(0 == stbl->stsc_count && NULL == stbl->stsc); // duplicated STSC atom
 	if (stbl->stsc_count < entry_count)
@@ -36,39 +34,53 @@ int mov_read_stsc(struct mov_t* mov, const struct mov_box_t* box)
 
 	for (i = 0; i < entry_count; i++)
 	{
-		stbl->stsc[i].first_chunk = file_reader_rb32(mov->fp);
-		stbl->stsc[i].samples_per_chunk = file_reader_rb32(mov->fp);
-		stbl->stsc[i].sample_description_index = file_reader_rb32(mov->fp);
+		stbl->stsc[i].first_chunk = mov_buffer_r32(&mov->io);
+		stbl->stsc[i].samples_per_chunk = mov_buffer_r32(&mov->io);
+		stbl->stsc[i].sample_description_index = mov_buffer_r32(&mov->io);
 	}
 
-	return file_reader_error(mov->fp);
+	(void)box;
+	return mov_buffer_error(&mov->io);
 }
 
-size_t mov_write_stsc(const struct mov_t* mov, uint32_t count)
+size_t mov_write_stsc(const struct mov_t* mov)
 {
-	size_t size, i, j = 0;
-	const struct mov_sample_t* sample;
+	uint64_t offset;
+	uint64_t offset2;
+	size_t size, i, entry;
+	const struct mov_sample_t* chunk = NULL;
+	const struct mov_sample_t* sample = NULL;
 	const struct mov_track_t* track = mov->track;
 
-	size = 12/* full box */ + 4/* entry count */ + count * 12/* entry */;
+	size = 12/* full box */ + 4/* entry count */;
 
-	file_writer_wb32(mov->fp, size); /* size */
-	file_writer_write(mov->fp, "stsc", 4);
-	file_writer_wb32(mov->fp, 0); /* version & flags */
-	file_writer_wb32(mov->fp, count); /* entry count */
+	offset = mov_buffer_tell(&mov->io);
+	mov_buffer_w32(&mov->io, 0); /* size */
+	mov_buffer_write(&mov->io, "stsc", 4);
+	mov_buffer_w32(&mov->io, 0); /* version & flags */
+	mov_buffer_w32(&mov->io, 0); /* entry count */
 
-	for (i = 0; i < track->sample_count; i++)
+	for (i = 0, entry = 0; i < track->sample_count; i++)
 	{
 		sample = &track->samples[i];
-		if (0 == sample->u.stsc.first_chunk)
+		if (0 == sample->first_chunk || 
+			(chunk && chunk->samples_per_chunk == sample->samples_per_chunk 
+				&& chunk->sample_description_index == sample->sample_description_index))
 			continue;
 
-		++j;
-		file_writer_wb32(mov->fp, sample->u.stsc.first_chunk);
-		file_writer_wb32(mov->fp, sample->u.stsc.samples_per_chunk);
-		file_writer_wb32(mov->fp, sample->u.stsc.sample_description_index);
+		++entry;
+		chunk = sample;
+		mov_buffer_w32(&mov->io, sample->first_chunk);
+		mov_buffer_w32(&mov->io, sample->samples_per_chunk);
+		mov_buffer_w32(&mov->io, sample->sample_description_index);
 	}
 
-	assert(j == count);
+	size += entry * 12/* entry size*/;
+	offset2 = mov_buffer_tell(&mov->io);
+	mov_buffer_seek(&mov->io, offset);
+	mov_buffer_w32(&mov->io, size); /* size */
+	mov_buffer_seek(&mov->io, offset + 12);
+	mov_buffer_w32(&mov->io, entry); /* entry count */
+	mov_buffer_seek(&mov->io, offset2);
 	return size;
 }

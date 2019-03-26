@@ -1,5 +1,3 @@
-ROOT:=../../sdk
-
 #--------------------------------Output------------------------------
 # OUTTYPE: 0-exe, 1-dll, 2-static
 #--------------------------------------------------------------------
@@ -10,9 +8,7 @@ OUTFILE = librtp.a
 #
 # INCLUDES = $(addprefix -I,$(INCLUDES)) # add -I prefix
 #--------------------------------------------------------------------
-INCLUDES = . \
-					./include \
-					$(ROOT)/include 
+INCLUDES = . ./include
 
 #-------------------------------Source-------------------------------
 #
@@ -43,9 +39,4 @@ STATIC_LIBS =
 #--------------------------------------------------------------------
 DEFINES =
 
-include $(ROOT)/gcc.mk
-
-GCC_VER_GTE44 := $(shell echo `gcc -dumpversion | cut -f1-2 -d.` \< 4.4 | bc )
-ifeq ($(GCC_VER_GTE44),1)
-CFLAGS += -march=i586
-endif
+include ../gcc.mk

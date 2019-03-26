@@ -1,16 +1,16 @@
-#include "cstringext.h"
 #include "rtp-member.h"
-#include "sys/atomic.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
 struct rtp_member* rtp_member_create(uint32_t ssrc)
 {
 	struct rtp_member* p;
-	p = (struct rtp_member*)malloc(sizeof(struct rtp_member));
+	p = (struct rtp_member*)calloc(1, sizeof(struct rtp_member));
 	if(!p)
 		return NULL;
 
-	memset(p, 0, sizeof(struct rtp_member));
 	p->ref = 1;
 	p->ssrc = ssrc;
 	p->jitter = 0.0;
@@ -22,12 +22,12 @@ struct rtp_member* rtp_member_create(uint32_t ssrc)
 
 void rtp_member_addref(struct rtp_member *member)
 {
-	atomic_increment32(&member->ref);
+	++member->ref;
 }
 
 void rtp_member_release(struct rtp_member *member)
 {
-	if(0 == atomic_decrement32(&member->ref))
+	if(0 == --member->ref)
 	{
 		size_t i;
 		for(i = 0; i < sizeof(member->sdes)/sizeof(member->sdes[0]); i++)
@@ -44,11 +44,11 @@ void rtp_member_release(struct rtp_member *member)
 	}
 }
 
-int rtp_member_setvalue(struct rtp_member *member, int item, const unsigned char* data, size_t bytes)
+int rtp_member_setvalue(struct rtp_member *member, int item, const uint8_t* data, int bytes)
 {
 	rtcp_sdes_item_t *sdes;
 	assert(RTCP_SDES_CNAME <= item && item <= RTCP_SDES_PRIVATE);
-	if((size_t)item >= sizeof(member->sdes)/sizeof(member->sdes[0]) || bytes > 255)
+	if(item >= sizeof(member->sdes)/sizeof(member->sdes[0]) || bytes > 255)
 		return -1;
 
 	sdes = &member->sdes[item];
@@ -61,9 +61,10 @@ int rtp_member_setvalue(struct rtp_member *member, int item, const unsigned char
 		sdes->data = p;
 	}
 
-	if(bytes > 0)
+	assert(bytes <= 255);
+	if (bytes > 0)
 		memcpy(sdes->data, data, bytes);
-	sdes->pt = (unsigned char)item;
-	sdes->len = (unsigned char)bytes;
+	sdes->pt = (uint8_t)item;
+	sdes->len = (uint8_t)bytes;
 	return 0;
 }

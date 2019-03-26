@@ -5,10 +5,11 @@
 /// RFC3551 6. Payload Type Definitions (p28)
 struct rtp_profile_t
 {
-	int pt;
-	const char* encoding;
-	int clock;
-	int channels;
+	int payload;	// 0~127, 96-127 dynamic, 35-71 unassigned, 72-76 reserved, 77-95 unassigned
+	int avtype;		// 0-unknown, 1-audio, 2-video, 3-system(audio/video)
+	int channels;	// number of channels
+	int frequency;	// clock rate
+	char name[32];  // case insensitive
 };
 
 /***
@@ -73,11 +74,11 @@ struct rtp_profile_t
 
 enum
 {
-	RTP_PAYLOAD_G711U		= 0,  // ITU-T G.711 PCM µ-Law audio 64 kbit/s (rfc3551)
+	RTP_PAYLOAD_PCMU		= 0,  // ITU-T G.711 PCM µ-Law audio 64 kbit/s (rfc3551)
+	RTP_PAYLOAD_PCMA		= 8,  // ITU-T G.711 PCM A-Law audio 64 kbit/s (rfc3551)
 	RTP_PAYLOAD_G722		= 9,  // ITU-T G.722 audio 64 kbit/s (rfc3551)
 	RTP_PAYLOAD_G729		= 18, // ITU-T G.729 and G.729a audio 8 kbit/s (rfc3551)
 	RTP_PAYLOAD_MPA			= 14, // MPEG-1/MPEG-2 audio (rfc2250)
-	RTP_PAYLOAD_MP4A		= 99, // MP4A-LATM MPEG-4 Audio (rfc6416)
 
 	RTP_PAYLOAD_JPEG		= 26, // JPEG video (rfc2435)
 	RTP_PAYLOAD_MPV			= 32, // MPEG-1 and MPEG-2 video (rfc2250)
@@ -86,9 +87,15 @@ enum
 
 	RTP_PAYLOAD_MP4V		= 96, // MP4V-ES MPEG-4 Visual (rfc6416)
 	RTP_PAYLOAD_H264		= 97, // H.264 video (MPEG-4 Part 10) (rfc6184)
-	RTP_PAYLOAD_MP2P		= 98, // MPEG-2 Program Streams video (rfc2250)
-	RTP_PAYLOAD_MP4ES		= 100, // MPEG4-generic audio/video MPEG-4 Elementary Streams (rfc3640)
-
+	RTP_PAYLOAD_H265		= 98, // H.265 video (MPEG-H Part 2) (rfc7798)
+	RTP_PAYLOAD_MP2P		= 99, // MPEG-2 Program Streams video (rfc2250)
+	RTP_PAYLOAD_MP4A		= 100, // MP4A-LATM MPEG-4 Audio (rfc6416)
+	RTP_PAYLOAD_OPUS		= 101, // RTP Payload Format for the Opus Speech and Audio Codec (rfc7587)
+	RTP_PAYLOAD_MP4ES		= 102, // MPEG4-generic audio/video MPEG-4 Elementary Streams (rfc3640)
 };
+
+///@param[in] payload RTP payload type(0 ~ 127)
+///@return NULL if not exist
+const struct rtp_profile_t* rtp_profile_find(int payload);
 
 #endif /* _rtp_profile_h_ */

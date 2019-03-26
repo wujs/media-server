@@ -31,6 +31,7 @@ a=orient:portrait
 static const char* sc_format =
 		"DESCRIBE %s RTSP/1.0\r\n"
 		"CSeq: %u\r\n"
+		"%s" // Authorization: Digest xxx
 		"Accept: application/sdp\r\n"
 		"User-Agent: %s\r\n"
 		"\r\n";
@@ -41,7 +42,8 @@ int rtsp_client_describe(struct rtsp_client_t* rtsp)
 	rtsp->progress = 0;
 	rtsp->state = RTSP_DESCRIBE;
 
-	r = snprintf(rtsp->req, sizeof(rtsp->req), sc_format, rtsp->uri, rtsp->cseq++, USER_AGENT);
+	r = rtsp_client_authenrization(rtsp, "DESCRIBE", rtsp->uri, NULL, 0, rtsp->authenrization, sizeof(rtsp->authenrization));
+	r = snprintf(rtsp->req, sizeof(rtsp->req), sc_format, rtsp->uri, rtsp->cseq++, rtsp->authenrization, USER_AGENT);
 	assert(r > 0 && r < sizeof(rtsp->req));
 	return r == rtsp->handler.send(rtsp->param, rtsp->uri, rtsp->req, r) ? 0 : -1;
 }
@@ -49,30 +51,43 @@ int rtsp_client_describe(struct rtsp_client_t* rtsp)
 int rtsp_client_describe_onreply(struct rtsp_client_t* rtsp, void* parser)
 {
 	int code, r;
-	const void* content;
-	const char* contentType;
-	const char* contentBase;
-	const char* contentLocation;
-
 	assert(0 == rtsp->progress);
 	assert(RTSP_DESCRIBE == rtsp->state);
 
 	r = -1;
-	code = rtsp_get_status_code(parser);
+	code = http_get_status_code(parser);
 	if (200 == code)
 	{
-		content = rtsp_get_content(parser);
-		contentType = rtsp_get_header_by_name(parser, "Content-Type");
-		contentBase = rtsp_get_header_by_name(parser, "Content-Base");
-		contentLocation = rtsp_get_header_by_name(parser, "Content-Location");
+		const void* content;
+		const char* contentType;
+		const char* contentBase;
+		const char* contentLocation;
+		content = http_get_content(parser);
+		contentType = http_get_header_by_name(parser, "Content-Type");
+		contentBase = http_get_header_by_name(parser, "Content-Base");
+		contentLocation = http_get_header_by_name(parser, "Content-Location");
 
 		if (contentBase)
-			strlcpy(rtsp->baseuri, contentBase, sizeof(rtsp->baseuri));
+			snprintf(rtsp->baseuri, sizeof(rtsp->baseuri), "%s", contentBase);
 		if (contentLocation)
-			strlcpy(rtsp->location, contentLocation, sizeof(rtsp->location));
+			snprintf(rtsp->location, sizeof(rtsp->location), "%s", contentLocation);
 
+		rtsp->auth_failed = 0;
 		if (!contentType || 0 == strcasecmp("application/sdp", contentType))
-			r = rtsp_client_setup(rtsp, content);
+		{
+			r = rtsp->handler.ondescribe(rtsp->param, (const char*)content);
+		}
+	}
+	else if (401 == code)
+	{
+		// Unauthorized
+		const char* authenticate;
+		authenticate = http_get_header_by_name(parser, "WWW-Authenticate");
+		if (authenticate && 0 == rtsp->auth_failed++)
+		{
+			rtsp_client_www_authenticate(rtsp, authenticate);
+			r = rtsp_client_describe(rtsp);
+		}
 	}
 
 	return r;

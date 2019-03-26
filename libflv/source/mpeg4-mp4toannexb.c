@@ -10,6 +10,17 @@
 #define H264_NAL_IDR		5 // Coded slice of an IDR picture
 #define H264_NAL_SPS		7 // Sequence parameter set
 #define H264_NAL_PPS		8 // Picture parameter set
+#define H264_NAL_AUD		9 // Access unit delimiter
+
+static size_t h264_sps_pps_size(const struct mpeg4_avc_t* avc)
+{
+	size_t i, n = 0;
+	for (i = 0; i < avc->nb_sps; i++)
+		n += avc->sps[i].bytes + 4;
+	for (i = 0; i < avc->nb_pps; i++)
+		n += avc->pps[i].bytes + 4;
+	return n;
+}
 
 size_t mpeg4_mp4toannexb(const struct mpeg4_avc_t* avc, const void* data, size_t bytes, void* out, size_t size)
 {
@@ -21,16 +32,15 @@ size_t mpeg4_mp4toannexb(const struct mpeg4_avc_t* avc, const void* data, size_t
 
 	sps_pps_flag = 0;
 	dst = (uint8_t*)out;
-	src = (const uint8_t*)data;
 	end = (const uint8_t*)data + bytes;
-	while (src + avc->nalu + 1 < end)
+	for (src = (const uint8_t*)data; src + avc->nalu + 1 < end; src += n + avc->nalu)
 	{
 		for (n = 0, i = 0; i < avc->nalu; i++)
 			n = (n << 8) + ((uint8_t*)src)[i];
 		
 #if defined(DEBUG) || defined(_DEBUG)
 		// fix 0x00 00 00 01 => flv nalu size
-		if (1 == n)
+		if (1 == n && (3 == avc->nalu || 4 == avc->nalu))
 			n = (end - src) - avc->nalu;
 #endif
 
@@ -53,12 +63,22 @@ size_t mpeg4_mp4toannexb(const struct mpeg4_avc_t* avc, const void* data, size_t
 			if (0 == sps_pps_flag)
 			{
 				sps_pps_flag = 1; // don't insert more than one-times
-				i = mpeg4_avc_to_nalu(avc, dst, size - (dst - (uint8_t*)out));
+				if (dst != out)
+				{
+					// write sps/pps at first
+					i = h264_sps_pps_size(avc);
+					memmove((uint8_t*)out + i, out, dst - (uint8_t*)out);
+				}
+				i = mpeg4_avc_to_nalu(avc, out, size);
 				if (i <= 0)
 					return 0;
 				dst += i;
 			}
 			break;
+#if defined(H2645_FILTER_AUD)
+		case H264_NAL_AUD:
+			continue; // ignore AUD
+#endif
 		}
 
 		if (dst + n + sizeof(h264_start_code) > (uint8_t*)out + size)
@@ -67,7 +87,6 @@ size_t mpeg4_mp4toannexb(const struct mpeg4_avc_t* avc, const void* data, size_t
 		memcpy(dst, h264_start_code, sizeof(h264_start_code));
 		memcpy(dst + sizeof(h264_start_code), src + avc->nalu, n);
 		dst += sizeof(h264_start_code) + n;
-		src += n + avc->nalu;
 	}
 
 	assert(src == end);
